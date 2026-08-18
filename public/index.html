@@ -318,6 +318,29 @@ function optionList(opts, current, useEmpty){
   let html = useEmpty ? '<option value="">— Select —</option>' : '';
   return html + opts.map(o=>`<option value="${esc(o.value)}" ${current===o.value?'selected':''}>${esc(o.label)}</option>`).join('');
 }
+// Normalise a name for duplicate detection: trim, lower-case, collapse internal whitespace.
+function normName(s){ return (s||'').trim().toLowerCase().replace(/\s+/g,' '); }
+// Build <datalist> options (supplier names) for the searchable supplier box.
+function supplierDatalist(sups){
+  const seen = new Set(); const uniq = [];
+  for (const s of sups){ const k = normName(s.name); if (!s.name || seen.has(k)) continue; seen.add(k); uniq.push(s.name); }
+  return uniq.sort((a,b)=>a.localeCompare(b)).map(n=>`<option value="${esc(n)}"></option>`).join('');
+}
+// Resolve a supplier combobox input (a typed/selected name) to a supplier id.
+// Matches an existing supplier by normalised name to avoid creating duplicates (e.g. several "Amazon"s);
+// only creates a new supplier when the typed name matches nothing.
+async function resolveSupplierInput(inputId){
+  const raw = (val(inputId)||'').trim();
+  if (!raw) return '';
+  const key = normName(raw);
+  const all = await refAll('suppliers');
+  const existing = all.find(s => normName(s.name) === key);
+  if (existing) return existing.id;
+  const id = uuid();
+  await idbPut('suppliers',{ id, name:raw, active:1, created_by:state.user.username, created_at:nowISO() });
+  toast(`Supplier “${raw}” added for everyone`,'info');
+  return id;
+}
 
 // ═══════════════════════════════════════════════
 // SEED DATA
@@ -850,7 +873,7 @@ async function buildReviewReceiptsPaneInner(receipts){
     } else if (mime.includes('pdf')){
       if (pdfjs){
         try {
-          const pdf = await pdfjs.getDocument({ data: dataURLtoUint8Array(r.data) }).promise;
+          const pdf = await pdfjs.getDocument(pdfDocOpts(dataURLtoUint8Array(r.data))).promise;
           const n = Math.min(pdf.numPages, 3);
           for (let p=1; p<=n; p++){
             const page = await pdf.getPage(p);
@@ -907,9 +930,7 @@ async function saveCurrentLineSilent(){
   const id = nav.ids[nav.idx]; if (!id) return;
   const line = await idbGet('lines', id); if (!line) return;
   if (document.getElementById('el-amount')){
-    let supplierId = val('el-supplier');
-    const newSup = val('el-supplier-new');
-    if (newSup){ supplierId = uuid(); await idbPut('suppliers',{ id:supplierId, name:newSup, active:1, created_by:state.user.username, created_at:nowISO() }); }
+    const supplierId = await resolveSupplierInput('el-supplier');
     line.line_date    = val('el-date') || line.line_date;
     line.description  = val('el-desc');
     line.supplier_id  = supplierId;
@@ -1220,7 +1241,9 @@ async function openExpenseLineModal(line){
   _lineReceipts = line ? [...(line.receipts||[])] : [];
   const cats = await ref('categories'); const sups = await ref('suppliers'); const vats = await refAll('vat_rates');
   const catOpts = optionList(cats.map(c=>({value:c.id,label:`${c.name}${c.nominal_code?' ('+c.nominal_code+')':''}`})), line?.category_id, true);
-  const supOpts = optionList(sups.map(s=>({value:s.id,label:s.name})), line?.supplier_id, true);
+  const supDatalist = supplierDatalist(sups);
+  const curSup = line?.supplier_id ? await idbGet('suppliers', line.supplier_id) : null;
+  const curSupName = curSup?.name || '';
   const vatOpts = optionList(vats.filter(v=>v.active!==0).map(v=>({value:v.id,label:`${v.name}`})), line?.vat_rate_id || vats.find(v=>v.name.includes('Standard'))?.id, false);
   // For credit card reports, show "Purchase for department" and "Purchase for location" dropdowns — both default to the report owner's home values.
   const _report = state.currentReportId ? await idbGet('reports', state.currentReportId) : null;
@@ -1246,9 +1269,10 @@ async function openExpenseLineModal(line){
   const rejectBtn  = approveStageHere ? `<button class="btn btn-danger" onclick="rejectFromDetailedReview('${state.currentReportId}')">↺ Return to employee</button>` : '';
   const formFields = `
     <div class="form-row"><div class="form-group"><label class="req">Date</label><input type="date" id="el-date" value="${line?.line_date||today()}"></div>
-      <div class="form-group"><label>Supplier</label><select id="el-supplier">${supOpts}</select>
-        ${canEdit?`<button type="button" class="btn btn-sm btn-outline" style="margin-top:6px" onclick="toggleNewSupplier()">+ New supplier</button>
-        <input id="el-supplier-new" class="hidden" style="margin-top:6px" placeholder="New supplier name (added for everyone)">`:''}</div></div>
+      <div class="form-group"><label>Supplier</label>
+        <input id="el-supplier" list="el-supplier-list" autocomplete="off" placeholder="Start typing to search…" value="${esc(curSupName)}"${canEdit?'':' disabled'}>
+        <datalist id="el-supplier-list">${supDatalist}</datalist>
+        ${canEdit?`<div class="small muted">Start typing to find a supplier. Type a new name to add it for everyone (duplicates are matched automatically).</div>`:''}</div></div>
     <div class="form-row-3">
       <div class="form-group"><label class="req">Category</label><select id="el-category">${catOpts}</select></div>
       <div class="form-group"><label class="req">Amount (gross £)</label><input type="number" step="0.01" id="el-amount" value="${line?.amount||''}" oninput="recalcExpenseVat()"></div>
@@ -1303,7 +1327,6 @@ async function openExpenseLineModal(line){
   if (!line) recalcExpenseVat();
   if (editMode) refreshReviewReceiptsPane();
 }
-function toggleNewSupplier(){ const i=document.getElementById('el-supplier-new'); i.classList.toggle('hidden'); if(!i.classList.contains('hidden')){ document.getElementById('el-supplier').value=''; i.focus(); } }
 async function recalcExpenseVat(){
   if (_vatManual) return;   // respect a manually-entered VAT amount
   const amt = numVal('el-amount'); const vid = val('el-vat-rate');
@@ -1315,9 +1338,7 @@ async function recalcExpenseVat(){
 async function saveExpenseLine(id){
   const amount = numVal('el-amount');
   if(!val('el-date') || !val('el-category') || !amount){ toast('Date, category and amount are required','error'); return; }
-  let supplierId = val('el-supplier');
-  const newSup = val('el-supplier-new');
-  if (newSup){ supplierId = uuid(); await idbPut('suppliers',{ id:supplierId, name:newSup, active:1, created_by:state.user.username, created_at:nowISO() }); toast(`Supplier “${newSup}” added for everyone`); }
+  const supplierId = await resolveSupplierInput('el-supplier');
   const line = {
     id: id||uuid(), report_id: state.currentReportId, line_type:'expense',
     line_date: val('el-date'), description: val('el-desc'),
@@ -1506,6 +1527,11 @@ function loadTesseract(){
   if (window.Tesseract) return Promise.resolve(window.Tesseract);
   return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'; s.onload=()=>res(window.Tesseract); s.onerror=()=>rej(new Error('load failed')); document.head.appendChild(s); });
 }
+// CMap + standard-font tables pdf.js needs to decode subsetted/embedded fonts (e.g. TfL ticket receipts).
+// Without these, glyphs draw but characters can render as mojibake on machines without the font/cache.
+const PDFJS_CMAP  = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/';
+const PDFJS_FONTS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/';
+function pdfDocOpts(data){ return { data, cMapUrl: PDFJS_CMAP, cMapPacked: true, standardFontDataUrl: PDFJS_FONTS }; }
 function loadPdfJs(){
   if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
   return new Promise((res,rej)=>{
@@ -1524,7 +1550,7 @@ function dataURLtoUint8Array(dataUrl){
 }
 async function pdfFirstPageToImage(dataUrl){
   const pdfjs = await loadPdfJs();
-  const pdf = await pdfjs.getDocument({ data: dataURLtoUint8Array(dataUrl) }).promise;
+  const pdf = await pdfjs.getDocument(pdfDocOpts(dataURLtoUint8Array(dataUrl))).promise;
   const page = await pdf.getPage(1);
   const viewport = page.getViewport({ scale: 2 });
   const canvas = document.createElement('canvas');
@@ -1536,7 +1562,7 @@ async function pdfFirstPageToImage(dataUrl){
 // Groups items by approximate y-position so reconstructed lines preserve receipt layout.
 async function pdfExtractText(dataUrl){
   const pdfjs = await loadPdfJs();
-  const pdf = await pdfjs.getDocument({ data: dataURLtoUint8Array(dataUrl) }).promise;
+  const pdf = await pdfjs.getDocument(pdfDocOpts(dataURLtoUint8Array(dataUrl))).promise;
   let out = '';
   const pageCount = Math.min(pdf.numPages, 3);
   for (let i=1;i<=pageCount;i++){
@@ -1664,7 +1690,7 @@ function parseReceiptText(text){
   applyParsedDate(text);
   // ── Supplier ──
   const sup = detectSupplier(rawLines);
-  if (sup){ const ni=document.getElementById('el-supplier-new'); if (ni){ ni.classList.remove('hidden'); ni.value = sup.slice(0,60); document.getElementById('el-supplier').value=''; } }
+  if (sup){ const si=document.getElementById('el-supplier'); if (si){ si.value = sup.slice(0,60); } }
 }
 function applyParsedDate(text){
   const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
@@ -1759,7 +1785,7 @@ async function printableReport(reportId){
         images.push(rc.data);
       } else if (mime.includes('pdf') && pdfjs){
         try {
-          const pdf = await pdfjs.getDocument({ data: dataURLtoUint8Array(rc.data) }).promise;
+          const pdf = await pdfjs.getDocument(pdfDocOpts(dataURLtoUint8Array(rc.data))).promise;
           const n = Math.min(pdf.numPages, 5);
           for (let p=1; p<=n; p++){
             const page = await pdf.getPage(p);
@@ -2917,6 +2943,10 @@ async function saveRef(store, id){
   const def = REF_DEFS[store];
   const rec = id ? await idbGet(store, id) : { id:uuid(), active:1 };
   for (const f of def.fields){ const v=val('rf-'+f[0]); if(f[3]&&!v){ toast(f[1]+' is required','error'); return; } rec[f[0]] = f[2]==='number'? (v===''?0:Number(v)) : v; }
+  if (store==='suppliers'){
+    const dupe = (await idbGetAll('suppliers')).find(s => s.id!==rec.id && normName(s.name)===normName(rec.name));
+    if (dupe){ toast(`“${dupe.name}” already exists${dupe.active===0?' (currently disabled)':''} — not added again.`,'error'); return; }
+  }
   if (store==='suppliers' && !id){ rec.created_by=state.user.username; rec.created_at=nowISO(); }
   await idbPut(store, rec); closeModal(); navigate(state.page);
 }
