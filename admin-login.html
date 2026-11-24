@@ -24,11 +24,13 @@
   <img src="/logo.svg" alt="Komfort">
   <h1>Admin set-up sign-in</h1>
   <div class="warn">For initial set-up and recovery only. Staff sign in with Microsoft.
-    Turn this off (<code>ADMIN_LOGIN_ENABLED</code>) once Microsoft accounts are linked.</div>
+    Remove <code>ADMIN_SETUP_KEY</code> and turn off <code>ADMIN_LOGIN_ENABLED</code> once Microsoft accounts are linked.</div>
   <label for="u">Username</label>
   <input id="u" autocomplete="username" required autofocus>
   <label for="p">Password</label>
   <input id="p" type="password" autocomplete="current-password" required>
+  <label for="k">Setup key <span style="color:#999">(not needed on the server machine itself)</span></label>
+  <input id="k" type="password" autocomplete="off">
   <button id="b" type="submit">Sign in</button>
   <div id="msg" role="alert"></div>
 </form>
@@ -39,7 +41,7 @@ document.getElementById('f').addEventListener('submit', async e => {
   b.disabled = true; msg.textContent = '';
   try {
     const r = await fetch('/api/auth/admin-login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: document.getElementById('u').value.trim(), password: document.getElementById('p').value }) });
+      body: JSON.stringify({ username: document.getElementById('u').value.trim(), password: document.getElementById('p').value, setup_key: document.getElementById('k').value }) });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(data.error || 'Sign-in failed');
     localStorage.setItem('exp_token', data.token);

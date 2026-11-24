@@ -6,6 +6,8 @@ firewall ports are opened. Sign-in is Microsoft Entra only (see `MICROSOFT-SIGNI
 
 Below, `expenses.example.co.uk` stands for your real hostname.
 
+> **Deploying to Render instead (or first)?** See [Running on Render](#running-on-render) at the end.
+
 ## 1. Prerequisites
 
 - An always-on Windows machine with **Node.js 22.13 or newer** (`node --version`).
@@ -140,3 +142,50 @@ add a public hostname `expenses.example.co.uk` → `http://127.0.0.1:3000`, and 
 - **Optional extra gate**: Cloudflare Access can put an Entra-login wall in front of the whole hostname.
   It is not required (the app already requires Entra sign-in), and it complicates the Android app, so
   only add it if you want defence in depth for the website.
+
+## Running on Render
+
+The same code runs on the existing Render service (with its 1 GB persistent disk). The server
+detects Render automatically: it listens on all interfaces and trusts Render's proxy for visitor IPs.
+
+### Before deploying
+
+1. **Back up the live database** (step 4 above: the console snippet as a finance user). This is your
+   rollback point; the new version adds messages, audit entries and Microsoft links to the data.
+2. **Entra:** in the app registration → Authentication → Web, add
+   `https://<your-render-address>/api/auth/microsoft/callback` (your custom domain if Render serves one).
+3. **Render → Environment**, add:
+
+   | Key | Value |
+   |---|---|
+   | `NODE_VERSION` | `22` (the app needs Node 22.13+) |
+   | `MICROSOFT_TENANT_ID` | Directory (tenant) ID |
+   | `MICROSOFT_CLIENT_ID` | Application (client) ID |
+   | `MICROSOFT_CLIENT_SECRET` | the secret **Value** |
+   | `MICROSOFT_REDIRECT_URI` | `https://<your-render-address>/api/auth/microsoft/callback` |
+   | `APP_URL` | `https://<your-render-address>` |
+   | `ADMIN_LOGIN_ENABLED` | `true` (temporary) |
+   | `ADMIN_SETUP_KEY` | a long random key (temporary), from `node -e "console.log(require('crypto').randomBytes(36).toString('base64url'))"` |
+
+   Keep the existing `JWT_SECRET`, `DATA_DIR` and mail settings. `JWT_SECRET` must be at least 32
+   characters (Render's generated value is). Keep the key in a password manager, not in email or chat.
+
+### One-time linking
+
+1. Deploy the branch. Everyone's existing password sessions end; only Microsoft sign-in is offered.
+2. Open `https://<your-render-address>/admin`, enter the `admin` username, its password and the setup key.
+   (If you don't know the live `admin` password, ask before deploying; it can't be reset from Render while
+   the server runs.)
+3. **Users → Edit → Microsoft user object ID**: add your own Object ID first, then everyone else's.
+   Duplicate or malformed IDs are refused. New `@komfort.co.uk` staff who sign in unlinked get an account
+   with no roles, which finance then assigns.
+4. Sign out, sign in with Microsoft and confirm you land on your finance account.
+5. **Delete `ADMIN_SETUP_KEY` and set `ADMIN_LOGIN_ENABLED=false`** in Render, then redeploy/restart.
+   `/admin` becomes a 404 and any session opened with the key stops working immediately.
+6. Optional: disable the `admin` user under Users once everyone is linked.
+
+### Rolling back
+
+Redeploy `main` in Render. If you need the data exactly as it was, restore the backup from step 1
+onto the disk (Render Shell → replace `$DATA_DIR/expenses-system.db`, then restart). Note that
+password sign-in will work again for everyone once `main` is running.

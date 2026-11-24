@@ -20,10 +20,19 @@ const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET || JWT_SECRET.length < 32 || JWT_SECRET === 'expenses-dev-secret-change-me')
   throw new Error('Configure JWT_SECRET before starting Expenses.');
 
-// Behind a Cloudflare Tunnel every request arrives from cloudflared on loopback.
-// Trusting loopback makes req.ip the real visitor (from X-Forwarded-For), so the
-// per-IP rate limits apply per person rather than to the whole company at once.
-app.set('trust proxy', process.env.TRUST_PROXY || 'loopback');
+// Which proxies may tell us the visitor's IP (X-Forwarded-For), so the per-IP rate limits
+// apply per person rather than to the whole company at once.
+//  - Cloudflare Tunnel: cloudflared connects over loopback → 'loopback' (the default).
+//  - Render: requests arrive through Render's own proxies → trust them (default when RENDER is set).
+// TRUST_PROXY overrides: 'true', 'false', a hop count such as '2', or a list of addresses/subnets.
+const IS_RENDER = !!process.env.RENDER;
+function trustProxySetting(value) {
+  if (value === undefined || value === '') return IS_RENDER ? true : 'loopback';
+  if (value === 'true' || value === 'false') return value === 'true';
+  if (/^\d+$/.test(value)) return Number(value);
+  return value;
+}
+app.set('trust proxy', trustProxySetting(process.env.TRUST_PROXY));
 
 // The web app and Android WebView use same-origin requests; no wildcard CORS.
 app.disable('x-powered-by');
@@ -66,19 +75,36 @@ function sessionUser(u, method) {
 }
 
 // ── Break-glass admin sign-in (initial set-up / recovery only) ──
-// Off unless ADMIN_LOGIN_ENABLED=true, limited to one username, and only usable from
-// the server machine itself: anything arriving through the Cloudflare Tunnel carries
-// forwarding headers and is refused, so the page is not reachable from the internet.
+// Off unless ADMIN_LOGIN_ENABLED=true, and limited to one username. Two ways in:
+//  - on the server machine itself (no forwarding headers), password only; or
+//  - remotely (e.g. on Render) only while ADMIN_SETUP_KEY is set, with password AND key.
+// Remote sessions are bound to the key: removing or changing ADMIN_SETUP_KEY ends them,
+// and with no key set the page is a plain 404 from outside.
 const ADMIN_LOGIN_ENABLED = process.env.ADMIN_LOGIN_ENABLED === 'true';
 const ADMIN_LOGIN_USERNAME = String(process.env.ADMIN_LOGIN_USERNAME || 'admin').toLowerCase();
+const ADMIN_SETUP_KEY = process.env.ADMIN_SETUP_KEY || '';
+if (ADMIN_SETUP_KEY && ADMIN_SETUP_KEY.length < 32) throw new Error('ADMIN_SETUP_KEY must be at least 32 characters.');
+const setupKeyHash = ADMIN_SETUP_KEY ? crypto.createHash('sha256').update(ADMIN_SETUP_KEY).digest('base64url') : null;
 function isDirectLocalRequest(req) {
   const addr = req.socket.remoteAddress || '';
   return ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(addr) &&
     !req.headers['x-forwarded-for'] && !req.headers['cf-connecting-ip'] && !req.headers['cf-ray'];
 }
-function adminLoginAllowed(req) { return ADMIN_LOGIN_ENABLED && isDirectLocalRequest(req); }
-function signToken(u, method = 'microsoft') {
-  return jwt.sign({ id: u.id, username: u.username, roles: u.roles, full_name: u.full_name, auth_method: method, session_fingerprint: fingerprint(u) },
+function setupKeyMatches(key) {
+  if (!setupKeyHash || typeof key !== 'string' || !key) return false;
+  const given = crypto.createHash('sha256').update(key).digest();
+  return crypto.timingSafeEqual(given, Buffer.from(setupKeyHash, 'base64url'));
+}
+// May this request see the page / attempt a sign-in at all?
+function adminLoginReachable(req) { return ADMIN_LOGIN_ENABLED && (isDirectLocalRequest(req) || !!setupKeyHash); }
+// Is an existing break-glass session still valid for this request?
+function adminSessionValid(req, token) {
+  if (!ADMIN_LOGIN_ENABLED) return false;
+  if (token.setup_key) return !!setupKeyHash && token.setup_key === setupKeyHash;
+  return isDirectLocalRequest(req);
+}
+function signToken(u, method = 'microsoft', extra = {}) {
+  return jwt.sign({ id: u.id, username: u.username, roles: u.roles, full_name: u.full_name, auth_method: method, session_fingerprint: fingerprint(u), ...extra },
     JWT_SECRET, { expiresIn: '1h', algorithm: 'HS256' });
 }
 function auth(req, res, next) {
@@ -89,7 +115,7 @@ function auth(req, res, next) {
     const user = store.get('users', req.user.id);
     if (req.user.auth_method === 'local-admin') {
       // Break-glass sessions stop working as soon as the flag is turned off, and never work remotely.
-      if (!adminLoginAllowed(req) || !user?.active || String(user.username).toLowerCase() !== ADMIN_LOGIN_USERNAME)
+      if (!adminSessionValid(req, req.user) || !user?.active || String(user.username).toLowerCase() !== ADMIN_LOGIN_USERNAME)
         return res.status(401).json({ error: 'Please sign in with Microsoft.' });
     } else {
       if (req.user.auth_method !== 'microsoft')
@@ -261,24 +287,29 @@ for (const route of ['/api/login', '/api/change-password', '/api/forgot-password
   app.post(route, microsoftOnly);
 }
 
-// Break-glass page and endpoint: a plain 404 unless enabled and opened on the server itself.
+// Break-glass page and endpoint: a plain 404 unless enabled, and from outside the server
+// machine only while ADMIN_SETUP_KEY is set.
 app.get('/admin', (req, res) => {
-  if (!adminLoginAllowed(req)) return res.status(404).send('Not found');
+  if (!adminLoginReachable(req)) return res.status(404).send('Not found');
   res.sendFile(path.join(__dirname, 'admin-login.html'));
 });
 app.post('/api/auth/admin-login', rateLimit({ limit: 5, windowMs: 60000 }), (req, res) => {
-  if (!adminLoginAllowed(req)) return res.status(404).json({ error: 'Not found' });
-  const { username, password } = req.body || {};
+  if (!adminLoginReachable(req)) return res.status(404).json({ error: 'Not found' });
+  const { username, password, setup_key } = req.body || {};
+  const local = isDirectLocalRequest(req);
   const u = store.getAll('users').find(x => String(x.username).toLowerCase() === ADMIN_LOGIN_USERNAME);
-  const ok = u && u.active && String(username || '').toLowerCase() === ADMIN_LOGIN_USERNAME &&
+  const keyOk = local || setupKeyMatches(setup_key);
+  const ok = keyOk && u && u.active && String(username || '').toLowerCase() === ADMIN_LOGIN_USERNAME &&
     typeof password === 'string' && u.password_hash && bcrypt.compareSync(password, u.password_hash);
+  const method = local ? 'local' : 'setup-key';
   if (!ok) {
-    if (u) recordAudit(u, 'admin_login_failed', { method: 'local-admin' });
-    return res.status(401).json({ error: 'Invalid username or password' });
+    if (u) recordAudit(u, 'admin_login_failed', { method: 'break-glass', via: method, ip: req.ip });
+    return res.status(401).json({ error: local ? 'Invalid username or password' : 'Invalid username, password or setup key' });
   }
-  recordAudit(u, 'login', { method: 'local-admin' });
-  console.warn(`Break-glass admin sign-in by ${u.username} at ${new Date().toISOString()}`);
-  res.json({ token: signToken(u, 'local-admin'), user: sessionUser(u, 'local-admin') });
+  recordAudit(u, 'login', { method: 'break-glass', via: method, ip: req.ip });
+  console.warn(`Break-glass admin sign-in by ${u.username} (${method}, ${req.ip}) at ${new Date().toISOString()}`);
+  // Sessions from the setup key are bound to it (see adminSessionValid); local ones to the machine.
+  res.json({ token: signToken(u, 'local-admin', local ? {} : { setup_key: setupKeyHash }), user: sessionUser(u, 'local-admin') });
 });
 
 app.get('/api/me', auth, (req, res) => {
@@ -521,9 +552,13 @@ app.use((error, req, res, next) => {
 });
 
 store.initDb().then(() => {
-  const HOST = process.env.HOST || '127.0.0.1'; // loopback only: the public route is the Cloudflare Tunnel
+  // Self-hosted: loopback only, the public route is the Cloudflare Tunnel.
+  // Render: must listen on all interfaces so Render's proxy can reach it.
+  const HOST = process.env.HOST || (IS_RENDER ? '0.0.0.0' : '127.0.0.1');
   app.listen(PORT, HOST, () => {
     console.log(`Komfort Expenses System running on http://${HOST}:${PORT}`);
-    if (ADMIN_LOGIN_ENABLED) console.warn(`Break-glass admin sign-in is ON for "${ADMIN_LOGIN_USERNAME}" at http://localhost:${PORT}/admin (this machine only). Set ADMIN_LOGIN_ENABLED=false after set-up.`);
+    if (ADMIN_LOGIN_ENABLED) console.warn(`Break-glass admin sign-in is ON for "${ADMIN_LOGIN_USERNAME}" at /admin — ` +
+      (setupKeyHash ? 'reachable REMOTELY with the setup key. Remove ADMIN_SETUP_KEY once Microsoft accounts are linked.'
+                    : 'on this machine only. Set ADMIN_LOGIN_ENABLED=false after set-up.'));
   });
 }).catch(err => { console.error('Failed to start:', err); process.exit(1); });
