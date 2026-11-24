@@ -1,0 +1,14 @@
+# Cloudflare Tunnel config for Komfort Expenses.
+# Copy to C:\Users\<you>\.cloudflared\config.yml (or C:\Windows\System32\config\systemprofile\.cloudflared\config.yml
+# when running cloudflared as a Windows service) and replace the placeholders.
+tunnel: <TUNNEL-UUID>
+credentials-file: C:\Users\<you>\.cloudflared\<TUNNEL-UUID>.json
+
+ingress:
+  - hostname: expenses.example.co.uk
+    service: http://127.0.0.1:3000
+    originRequest:
+      # Receipt uploads are base64 in JSON and can be several MB.
+      connectTimeout: 30s
+  # Anything else gets a 404 rather than reaching the app.
+  - service: http_status:404

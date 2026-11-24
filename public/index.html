@@ -39,8 +39,8 @@
       width: 100%; padding: 10px; border: 2px solid var(--border); border-radius: 8px; font-size: 0.95rem; background: #fff; font-family: inherit;
     }
     .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary); outline: none; }
-    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    .form-row { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+    .form-row-3 { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
     @media (max-width:600px){ .form-row, .form-row-3 { grid-template-columns: 1fr; } }
     .req::after { content: " *"; color: var(--danger); }
     fieldset { border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
@@ -51,7 +51,7 @@
     .muted { color: var(--text-light); }
     .small { font-size: 0.85rem; }
 
-    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(170px,1fr)); gap: 16px; margin-bottom: 16px; }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,170px),1fr)); gap: 16px; margin-bottom: 16px; }
     .stat { background: var(--card); border-radius: 12px; box-shadow: var(--shadow); padding: 18px; border-left: 5px solid var(--accent); position: relative; }
     .stat .num { font-size: 1.9rem; font-weight: 700; color: var(--primary); }
     .stat.clickable { cursor: pointer; transition: transform .15s, box-shadow .15s; }
@@ -78,6 +78,7 @@
     .b-blue { background: #e3f0fb; color: var(--info); }
     .b-yellow { background: var(--accent); color: var(--primary); }
 
+    #microsoft-cancel[hidden] { display: none; }
     #login-view { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg,#404042,#565A5C); padding: 20px; }
     .login-card { background: #fff; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,.3); padding: 36px; width: 100%; max-width: 410px; border-top: 6px solid var(--accent); }
     .login-sub { text-align: center; color: var(--text-light); margin-bottom: 24px; font-weight:600; letter-spacing:.5px; }
@@ -183,6 +184,37 @@
       .main { margin-left: 0; }
       .hamburger { display: block; }
     }
+    /* Let flex/grid children shrink so tables scroll inside their cards. */
+    .main, .content, .card, .form-group, .form-row > *, .form-row-3 > *,
+    .review-grid > *, .topbar > *, .kv > * { min-width: 0; }
+    .main { width: 0; }
+    .content { padding: clamp(12px,2vw,24px); }
+    .card, .modal { padding: clamp(16px,2vw,24px); }
+    .login-card { padding: clamp(20px,5vw,36px); }
+    .form-group input, .form-group select, .form-group textarea,
+    .toolbar input, .toolbar select { min-width: 0; max-width: 100%; }
+    .toolbar > * { max-width: 100%; }
+    .table-wrap { max-width: 100%; overscroll-behavior-x: contain; }
+    .user-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .topbar { gap: 12px; }
+    .topbar h1, .login-card h2, .kv dd, .sidebar .who { overflow-wrap: anywhere; }
+    .modal { max-height: none; }
+    .modal h2, .modal-sub { overflow-wrap: anywhere; }
+    .toast-container { max-width: calc(100vw - 32px); }
+    .toast { max-width: 100%; overflow-wrap: anywhere; }
+    @media (max-width:600px) {
+      .topbar { padding: 12px 16px; flex-wrap: wrap; }
+      .topbar .ta { width: 100%; justify-content: flex-start; }
+      .toolbar { gap: 8px; }
+      .toolbar .grow { min-width: 0; flex-basis: 100%; }
+      .toolbar input, .toolbar select { width: 100%; }
+      .modal-overlay { padding: 12px; }
+      .modal-actions > .btn { flex: 1 1 auto; }
+      fieldset { min-width: 0; padding: 12px; }
+      .review-nav { flex-wrap: wrap; }
+      .review-form, .review-receipts { max-height: none; }
+      .toast-container { right: 16px; bottom: 16px; }
+    }
   </style>
 </head>
 <body>
@@ -192,18 +224,20 @@
   <div class="login-card">
     <div style="text-align:center"><img src="/logo.svg" alt="Komfort" style="height:64px;margin-bottom:8px;"></div>
     <div class="login-sub">EXPENSES SYSTEM</div>
-    <form id="login-form" onsubmit="handleLogin(event)">
-      <div class="form-group">
-        <label>Username</label>
-        <input id="login-username" autocomplete="username" required autofocus>
-      </div>
-      <div class="form-group">
-        <label>Password</label>
-        <input id="login-password" type="password" autocomplete="current-password" required>
-      </div>
-      <button class="btn btn-primary" style="width:100%" type="submit">Sign in</button>
-    </form>
-    <div style="text-align:center;margin-top:14px"><a href="#" onclick="forgotPassword();return false" style="font-size:.85rem;color:var(--text-light);text-decoration:none">Forgot password?</a></div>
+    <p class="muted" style="margin-bottom:18px">Use your Microsoft work account to sign in.</p>
+    <button id="microsoft-signin" class="btn btn-outline" style="width:100%" type="button" disabled>Sign in with Microsoft</button>
+    <p id="microsoft-status" role="status" aria-live="polite" class="small muted" style="margin-top:10px"></p>
+    <button id="microsoft-cancel" type="button" class="btn btn-outline btn-sm" hidden>Cancel Microsoft sign-in</button>
+  </div>
+</div>
+
+<div id="permissions-pending" style="display:none;min-height:100vh;align-items:center;justify-content:center;padding:20px;background:var(--bg)">
+  <div class="login-card" role="status">
+    <img src="/logo.svg" alt="Komfort" style="height:64px;display:block;margin:0 auto 24px">
+    <h2>Ask an admin to assign you permissions</h2>
+    <p style="margin:16px 0">Your account has been created. An admin needs to assign your permissions before you can use Expenses.</p>
+    <button class="btn btn-primary" onclick="checkPermissions()">Check permissions</button>
+    <button class="btn btn-outline" onclick="logout()">Sign out</button>
   </div>
 </div>
 
@@ -218,7 +252,6 @@
     <div class="who">
       <div class="name" id="who-name"></div>
       <div class="role" id="who-role"></div>
-      <button class="btn btn-outline btn-sm" style="margin-top:10px;width:100%;border-color:rgba(255,255,255,.4);color:#fff" onclick="changePassword()">Change password</button>
       <button class="btn btn-outline btn-sm" style="margin-top:8px;width:100%;border-color:rgba(255,255,255,.4);color:#fff" onclick="logout()">Sign out</button>
     </div>
   </aside>
@@ -237,6 +270,7 @@
 <div class="modal-overlay" id="modal-overlay"><div class="modal" id="modal"></div></div>
 <div class="toast-container" id="toast-container"></div>
 
+<script src="/microsoft-signin.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════════════
 // DATA LAYER — IndexedDB (offline/local persistence). Mirrors
@@ -270,7 +304,8 @@ function uuid(){ return crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx
 function nowISO(){ return new Date().toISOString(); }
 function today(){ return new Date().toISOString().slice(0,10); }
 async function sha256(str){ const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)); return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
-async function logAction(action, details={}){ try{ await idbPut('audit_log',{ id:undefined, timestamp:nowISO(), user:state.user?.username||'system', action, ...details }); }catch(e){} }
+// Mutations and Microsoft logins are audited by the server using the real actor.
+async function logAction(action, details={}){}
 async function getSetting(k,f){ const r=await idbGet('settings',k); return r?r.value:f; }
 async function setSetting(k,v){ return idbPut('settings',{key:k,value:v}); }
 
@@ -501,45 +536,25 @@ function isManager(){ return hasRole('manager'); }
 function isCC(){ return hasRole('credit_card'); }
 function isEmployee(){ return hasRole('employee'); }
 
-async function handleLogin(e){
-  e.preventDefault();
-  const u = document.getElementById('login-username').value.trim();
-  const p = document.getElementById('login-password').value;
-  let res;
-  try { res = await apiFetch('POST', '/api/login', { username: u, password: p }); }
-  catch(err){ toast('Invalid username or password','error'); return; }
-  AUTH_TOKEN = res.token; localStorage.setItem('exp_token', res.token);
-  state.user = res.user;
-  try { await logAction('login'); } catch(e){}
-  await runAdminSetup();
-  await enterApp();
+function hasPermissions(){
+  return (state.user?.roles || []).some(r => ['employee','manager','finance','credit_card'].includes(r));
 }
-
-// Forgot / reset password
-async function forgotPassword(){
-  const id = prompt('Enter your username or email address and we will email you a reset link:');
-  if(!id) return;
-  try { await apiFetch('POST','/api/forgot-password',{ username_or_email: id }); } catch(e){}
-  toast('If that account exists, a password reset link has been sent by email.');
-}
-function showResetForm(token){
-  openModal(`<h2>Set a new password</h2>
-    <div class="modal-sub">Choose a new password for your account.</div>
-    <div class="form-group"><label class="req">New password</label><input type="password" id="rp-new" autocomplete="new-password"><div class="small muted">At least 6 characters.</div></div>
-    <div class="form-group"><label class="req">Confirm new password</label><input type="password" id="rp-confirm" autocomplete="new-password"></div>
-    <div class="modal-actions"><button class="btn btn-primary" onclick="submitReset('${token}')">Set password</button></div>`);
-}
-async function submitReset(token){
-  const np = val('rp-new'), c = val('rp-confirm');
-  if(!np || np.length < 6){ toast('New password must be at least 6 characters','error'); return; }
-  if(np !== c){ toast('New passwords do not match','error'); return; }
-  try { await apiFetch('POST','/api/reset-password',{ token, new: np }); }
-  catch(err){ toast(err.message || 'Reset failed','error'); return; }
-  closeModal();
-  history.replaceState({}, '', location.pathname);
-  toast('Password updated — please sign in with your new password.');
+async function checkPermissions(){
+  try {
+    state.user = await apiFetch('GET', '/api/me');
+    if (!hasPermissions()) { toast('Ask an admin to assign you permissions'); return; }
+    await runAdminSetup();
+    await enterApp();
+  } catch (error) { toast(error.message || 'Could not check permissions', 'error'); }
 }
 async function enterApp(){
+  document.getElementById('permissions-pending').style.display = hasPermissions() ? 'none' : 'flex';
+  if (!hasPermissions()) {
+    document.getElementById('login-view').style.display = 'none';
+    document.getElementById('app').classList.remove('active');
+    if (window.KomfortAndroid) window.KomfortAndroid.postMessage(JSON.stringify({type:'ready'}));
+    return;
+  }
   document.getElementById('login-view').style.display = 'none';
   document.getElementById('app').classList.add('active');
   await refreshCaches();
@@ -550,37 +565,23 @@ async function enterApp(){
   const items = navItems();
   const start = isFinance() ? 'dashboard' : (items[0]?.id || 'dashboard');
   navigate(start);
-  if (state.user.must_change_password) changePassword(true);
 }
-function logout(){
+async function logout(){
+  try { await apiFetch('POST','/api/logout',{}); } catch(error) {
+    if(AUTH_TOKEN){ toast('Could not revoke your session. Please try signing out again.','error'); return false; }
+  }
+  document.getElementById('permissions-pending').style.display = 'none';
+  KomfortMicrosoft.cancel();
   state.user = null; AUTH_TOKEN = null;
   localStorage.removeItem('exp_token');
+  state.usersById = {}; state.currentReportId = null; _lineReceipts = [];
+  document.getElementById('content').textContent = '';
+  closeModal();
   document.getElementById('app').classList.remove('active');
   document.getElementById('login-view').style.display = 'flex';
-  document.getElementById('login-form').reset();
+  return true;
 }
 
-// Self-service password change — available to every logged-in user
-function changePassword(forced){
-  openModal(`<h2>Change password</h2>
-    <div class="modal-sub">${forced ? 'Your account uses a temporary password set by Finance. Please choose a new password to continue.' : 'Update the password for your account ('+esc(state.user.username)+').'}</div>
-    <div class="form-group"><label class="req">Current password</label><input type="password" id="cp-current" autocomplete="current-password"></div>
-    <div class="form-group"><label class="req">New password</label><input type="password" id="cp-new" autocomplete="new-password"><div class="small muted">At least 6 characters.</div></div>
-    <div class="form-group"><label class="req">Confirm new password</label><input type="password" id="cp-confirm" autocomplete="new-password"></div>
-    <div class="modal-actions">${forced?'':'<button class="btn btn-outline" onclick="closeModal()">Cancel</button>'}
-      <button class="btn btn-primary" onclick="saveChangePassword()">Update password</button></div>`);
-}
-async function saveChangePassword(){
-  const cur = val('cp-current'), np = val('cp-new'), conf = val('cp-confirm');
-  if(!cur || !np || !conf){ toast('All fields are required','error'); return; }
-  if(np.length < 6){ toast('New password must be at least 6 characters','error'); return; }
-  if(np !== conf){ toast('New passwords do not match','error'); return; }
-  try { await apiFetch('POST', '/api/change-password', { current: cur, new: np }); }
-  catch(err){ toast(err.message || 'Could not change password','error'); return; }
-  state.user.must_change_password = false;
-  try { await logAction('password_changed'); } catch(e){}
-  closeModal(); toast('Password updated');
-}
 async function refreshCaches(){
   const users = await idbGetAll('users');
   state.usersById = {}; users.forEach(u => state.usersById[u.id] = u);
@@ -721,8 +722,9 @@ function popOrCloseModal(){
 document.getElementById('modal-overlay').addEventListener('click', e=>{ if(e.target.id==='modal-overlay') closeModal(); });
 function val(id){ const e=document.getElementById(id); return e? e.value.trim() : ''; }
 function numVal(id){ const v=val(id); return v===''?0:Number(v); }
+function safeNumber(value){const n=Number(value);return Number.isFinite(n)?n:0;}
 function fmtMoney(n){ if(n==null||n==='') return '£0.00'; return '£'+Number(n).toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-function fmtDate(d){ if(!d) return '—'; const dt=new Date(d); return isNaN(dt)?d:dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
+function fmtDate(d){ if(!d) return '—'; const dt=new Date(d); return isNaN(dt)?'—':dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
 function userName(id){ return state.usersById[id]?.full_name || '—'; }
 function round2(n){ return Math.round((Number(n)+Number.EPSILON)*100)/100; }
 
@@ -741,7 +743,7 @@ const STATUS_META = {
   approved:{label:'Approved',c:'b-green'},
   reimbursed:{label:'Reimbursed',c:'b-green'},
 };
-function statusBadge(s){ const m=STATUS_META[s]||{label:s,c:'b-grey'}; return `<span class="badge ${m.c}">${m.label}</span>`; }
+function statusBadge(s){ const m=STATUS_META[s]||{label:s,c:'b-grey'}; return `<span class="badge ${m.c}">${esc(m.label)}</span>`; }
 // Which display tab a report belongs to
 function tabGroup(status){
   if (status==='unsubmitted'||status==='rejected') return 'unsubmitted';
@@ -756,7 +758,7 @@ function tabGroup(status){
 async function reportLines(reportId){ return idbByIndex('lines','report_id',reportId); }
 function lineTotals(lines){
   let gross=0, vat=0, miles=0;
-  lines.forEach(l=>{ gross+=Number(l.amount)||0; vat+=Number(l.vat_amount)||0; if(l.line_type==='mileage') miles+=Number(l.distance_miles)||0; });
+  lines.forEach(l=>{ gross+=Number(l.amount)||0; vat+=Number(l.vat_amount)||0; if(l.line_type==='mileage') miles+=Number(safeNumber(l.distance_miles))||0; });
   return { gross:round2(gross), vat:round2(vat), net:round2(gross-vat), miles:round2(miles), count:lines.length };
 }
 
@@ -820,7 +822,7 @@ async function approvedMilesBefore(userId, claimDate, excludeLineId){
   for (const l of await allMileageLinesFor(userId)){
     if (l.id===excludeLineId || l.company_car) continue;
     if (!l.line_date || l.line_date<b.start || l.line_date>b.end) continue;
-    if (l.line_date < claimDate) miles += Number(l.distance_miles)||0;
+    if (l.line_date < claimDate) miles += Number(safeNumber(l.distance_miles))||0;
   }
   const adj = (await idbGetAll('mileage_adjustments')).filter(a=>a.user_id===userId && a.tax_year===ty);
   adj.forEach(a=> miles += Number(a.miles)||0);
@@ -836,11 +838,18 @@ function receiptsInputHtml(){
     <input type="file" id="rc-input" accept="image/*,application/pdf" multiple capture="environment" onchange="addReceipts(event)">
     <div class="receipts" id="rc-thumbs"></div></div>`;
 }
+function safeReceiptUrl(data, mime){
+  if (typeof data !== 'string') return '';
+  const match = /^data:([a-z0-9.+/-]+);base64,([A-Za-z0-9+/=\r\n]*)$/i.exec(data);
+  if (!match || (mime && String(mime).toLowerCase() !== match[1].toLowerCase())) return '';
+  if(!['image/png','image/jpeg','image/gif','image/webp','application/pdf'].includes(match[1].toLowerCase())) return '';
+  return data;
+}
 function renderReceiptThumbs(){
   const box = document.getElementById('rc-thumbs'); if(!box) return;
   box.innerHTML = _lineReceipts.map((r,i)=>{
-    const inner = (r.mime||'').startsWith('image/') ? `<img src="${r.data}" alt="">` : `<span class="doc">📄</span>`;
-    return `<div class="receipt-thumb" data-preview-src="${esc(r.data)}" data-preview-mime="${esc(r.mime||'')}" onclick="viewReceipt(${i})">${inner}<button class="rm" onclick="event.stopPropagation();removeReceipt(${i})">×</button></div>`;
+    const inner = (r.mime||'').startsWith('image/') ? `<img src="${esc(safeReceiptUrl(r.data,r.mime))}" alt="">` : `<span class="doc">📄</span>`;
+    return `<div class="receipt-thumb" data-preview-src="${esc(safeReceiptUrl(r.data,r.mime))}" data-preview-mime="${esc(r.mime||'')}" onclick="viewReceipt(${i})">${inner}<button class="rm" onclick="event.stopPropagation();removeReceipt(${i})">×</button></div>`;
   }).join('') || '<span class="small muted">No receipts attached.</span>';
 }
 function addReceipts(e){
@@ -869,8 +878,8 @@ async function buildReviewReceiptsPaneInner(receipts){
   for (const r of receipts){
     const mime = (r.mime||'').toLowerCase();
     if (mime.startsWith('image/')){
-      html += `<img src="${r.data}" style="width:100%;height:auto;border-radius:6px;margin-bottom:10px;border:1px solid var(--border)">`;
-    } else if (mime.includes('pdf')){
+      html += `<img src="${esc(safeReceiptUrl(r.data,r.mime))}" style="width:100%;height:auto;border-radius:6px;margin-bottom:10px;border:1px solid var(--border)">`;
+    } else if (mime === 'application/pdf'){
       if (pdfjs){
         try {
           const pdf = await pdfjs.getDocument(pdfDocOpts(dataURLtoUint8Array(r.data))).promise;
@@ -884,10 +893,10 @@ async function buildReviewReceiptsPaneInner(receipts){
             html += `<img src="${canvas.toDataURL('image/jpeg',0.85)}" style="width:100%;height:auto;border-radius:6px;margin-bottom:6px;border:1px solid var(--border)">`;
           }
         } catch(e){
-          html += `<iframe src="${r.data}" style="width:100%;height:520px;border:1px solid var(--border);border-radius:6px;background:#fff;margin-bottom:10px"></iframe>`;
+          html += `<iframe src="${esc(safeReceiptUrl(r.data,r.mime))}" style="width:100%;height:520px;border:1px solid var(--border);border-radius:6px;background:#fff;margin-bottom:10px"></iframe>`;
         }
       } else {
-        html += `<iframe src="${r.data}" style="width:100%;height:520px;border:1px solid var(--border);border-radius:6px;background:#fff;margin-bottom:10px"></iframe>`;
+        html += `<iframe src="${esc(safeReceiptUrl(r.data,r.mime))}" style="width:100%;height:520px;border:1px solid var(--border);border-radius:6px;background:#fff;margin-bottom:10px"></iframe>`;
       }
     } else {
       html += `<div style="padding:14px;background:#fff8e1;border:1px dashed var(--accent);border-radius:6px;margin-bottom:10px">📄 ${esc(r.name||'Receipt')}</div>`;
@@ -929,6 +938,8 @@ async function saveCurrentLineSilent(){
   if (nav.readOnly) return;
   const id = nav.ids[nav.idx]; if (!id) return;
   const line = await idbGet('lines', id); if (!line) return;
+  const editReport=await idbGet('reports',line.report_id);
+  if(!['unsubmitted','rejected'].includes(editReport?.status))return;
   if (document.getElementById('el-amount')){
     const supplierId = await resolveSupplierInput('el-supplier');
     line.line_date    = val('el-date') || line.line_date;
@@ -968,11 +979,24 @@ async function saveCurrentLineSilent(){
   }
 }
 function viewReceipt(i){
-  const r=_lineReceipts[i]; if(!r) return;
-  const w=window.open(); if(w){ w.document.write((r.mime||'').startsWith('image/')?`<img src="${r.data}" style="max-width:100%">`:`<iframe src="${r.data}" style="width:100%;height:100vh;border:none"></iframe>`); }
+  const r=_lineReceipts[i]; if (r) viewReceiptData(r.data,r.mime);
 }
 function viewReceiptData(data,mime){
-  const w=window.open(); if(w){ w.document.write((mime||'').startsWith('image/')?`<img src="${data}" style="max-width:100%">`:`<iframe src="${data}" style="width:100%;height:100vh;border:none"></iframe>`); }
+  const url=safeReceiptUrl(data,mime);
+  if (!url) { toast('This receipt contains invalid file data.', 'error'); return; }
+  const image=(mime||'').startsWith('image/');
+  const pdf=(mime||'').toLowerCase()==='application/pdf';
+  if (!image && !pdf) {
+    const a=document.createElement('a'); a.href=url; a.download='receipt'; a.click(); return;
+  }
+  const w=window.open();
+  if (w) {
+    w.opener=null;
+    const preview=w.document.createElement(image?'img':'iframe');
+    preview.src=url;
+    preview.style.cssText=image?'max-width:100%':'width:100%;height:100vh;border:none';
+    w.document.body.appendChild(preview);
+  }
 }
 
 // ── Excel export (HTML-table .xls; opens natively in Excel) ──
@@ -1001,6 +1025,13 @@ async function renderDashboard(c){
   const awaitingReimb = exp.filter(r=>r.status==='awaiting_reimbursement');
   const reimbThisItems = exp.filter(r=>r.status==='reimbursed');
   const sum = arr => round2(arr.reduce((s,r)=>s+r._t.gross,0));
+  // Status filter: "All" shows the 12 most recent; a chosen status shows every matching report.
+  const dashStatus = STATUS_META[window._dashStatus] ? window._dashStatus : '';
+  const recent = all.filter(r=>!dashStatus || r.status===dashStatus)
+    .sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
+  const shown = dashStatus ? recent : recent.slice(0,12);
+  const statusOpts = `<option value="">All statuses</option>` + Object.entries(STATUS_META).map(([k,m])=>
+    `<option value="${k}" ${k===dashStatus?'selected':''}>${esc(m.label)} (${all.filter(r=>r.status===k).length})</option>`).join('');
   c.innerHTML = `
     <div class="stat-grid">
       <div class="stat warn clickable" onclick="navigate('finance-approvals')"><div class="num">${awaitingFin.length}</div><div class="lbl">Awaiting finance approval</div></div>
@@ -1009,14 +1040,16 @@ async function renderDashboard(c){
       <div class="stat clickable" onclick="window._acStatus='';navigate('all-claims')"><div class="num">${all.length}</div><div class="lbl">Total reports</div></div>
     </div>
     <div class="card">
-      <div class="card-head"><h3>Recent activity</h3></div>
+      <div class="card-head"><h3>${dashStatus ? esc(STATUS_META[dashStatus].label)+` <span class="muted small">(${shown.length})</span>` : 'Recent activity'}</h3>
+        <div class="toolbar" style="margin:0"><label class="small muted" for="dash-status">Status</label>
+        <select id="dash-status" onchange="window._dashStatus=this.value;navigate(state.page)">${statusOpts}</select></div></div>
       <div class="table-wrap"><table><thead><tr><th>Report</th><th>Owner</th><th>Type</th><th>Status</th><th class="num">Total</th><th></th></tr></thead><tbody>
-        ${all.sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||'')).slice(0,12).map(r=>`
+        ${shown.map(r=>`
           <tr class="clickable" onclick="openReport('${r.id}')">
             <td><strong>${esc(r.title)}</strong>${r.reference?`<div class="small muted">${esc(r.reference)}</div>`:''}</td><td>${esc(userName(r.user_id))}</td>
             <td>${r.type==='creditcard'?'Credit card':'Expense'}</td><td>${statusBadge(r.status)}</td>
             <td class="num">${fmtMoney(r._t.gross)}</td><td>›</td>
-          </tr>`).join('') || '<tr><td colspan="6" class="muted">No reports yet.</td></tr>'}
+          </tr>`).join('') || `<tr><td colspan="6" class="muted">${dashStatus?'No reports with this status.':'No reports yet.'}</td></tr>`}
       </tbody></table></div>
     </div>`;
 }
@@ -1084,13 +1117,17 @@ async function openReport(id){
   if(!r){ toast('Report not found','error'); return navigate(state.page); }
   const lines = (await reportLines(id)).sort((a,b)=>(a.line_date||'').localeCompare(b.line_date||''));
   const t = lineTotals(lines);
+  let msgs = [];
+  try { msgs = await apiFetch('GET', '/api/reports/'+_enc(id)+'/messages') || []; } catch(e){ console.warn('Messages unavailable:', e.message); }
+  const msgCount = {}; msgs.forEach(m=>{ if (m.line_id) msgCount[m.line_id]=(msgCount[m.line_id]||0)+1; });
   const owner = state.usersById[r.user_id];
   const isOwner = r.user_id === state.user.id;
   const ownerEditable = isOwner && (r.status==='unsubmitted' || r.status==='rejected');
   // Once a report has reached its terminal state it is locked from further amendment by anyone.
   const isLocked = (r.type==='creditcard' && r.status==='approved') || (r.type==='expense' && r.status==='reimbursed');
-  const financeEditing = isFinance() && !ownerEditable && !isLocked;   // finance may edit any claim until it's locked
-  const editable = !isLocked && (ownerEditable || isFinance());
+  const financeEditing = isFinance() && !ownerEditable && !isLocked && ['unsubmitted','rejected'].includes(r.status);
+  const returnForCorrection=isFinance() && ['awaiting_manager','awaiting_finance','awaiting_reimbursement'].includes(r.status) ? `<button class="btn btn-outline" onclick="returnForCorrection('${r.id}')">Return for correction</button>` : '';
+  const editable = !isLocked && (ownerEditable || (isFinance() && ['unsubmitted','rejected'].includes(r.status)));
   const isCCt = r.type==='creditcard';
   // Quick-approve from the report detail: finance when awaiting_finance, or the assigned manager when awaiting_manager
   const isOwnReport = r.user_id === state.user.id;
@@ -1116,18 +1153,18 @@ async function openReport(id){
         <td>${esc(l.vehicle_type)}<div class="small muted">${esc(mileageRateDesc(l))}</div></td>
         <td class="num">${fmtMoney(l.vat_amount)}</td><td class="num"><strong>${fmtMoney(l.amount)}</strong></td>
         <td>${receiptCountBadge(l)}</td>
-        <td>${editable?`<button class="btn btn-sm btn-outline" onclick="editLine('${l.id}')">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteLine('${l.id}')">×</button>`:''}</td></tr>`;
+        <td style="white-space:nowrap">${lineMsgButton(r, l, msgCount[l.id])}${editable?` <button class="btn btn-sm btn-outline" onclick="editLine('${l.id}')">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteLine('${l.id}')">×</button>`:''}</td></tr>`;
     }
     return `<tr><td>${fmtDate(l.line_date)}</td><td><span class="badge b-yellow">Expense</span>${dup}</td>
       <td>${esc(supName(l.supplier_id))}<div class="small muted">${esc(l.description)||''}</div></td>
       <td>${esc(catName(l.category_id))}<div class="small muted">${esc(vatName(l.vat_rate_id))}</div></td>
       <td class="num">${fmtMoney(l.vat_amount)}</td><td class="num"><strong>${fmtMoney(l.amount)}</strong></td>
       <td>${receiptCountBadge(l)}</td>
-      <td>${editable?`<button class="btn btn-sm btn-outline" onclick="editLine('${l.id}')">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteLine('${l.id}')">×</button>`:''}</td></tr>`;
+      <td style="white-space:nowrap">${lineMsgButton(r, l, msgCount[l.id])}${editable?` <button class="btn btn-sm btn-outline" onclick="editLine('${l.id}')">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteLine('${l.id}')">×</button>`:''}</td></tr>`;
   }).join('') || `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">No expenses added yet.</td></tr>`;
   const dupBanner = dups.size ? `<div class="card" style="border-left:5px solid var(--warning)"><strong style="color:var(--warning)">⚠ ${dups.size} possible duplicate${dups.size>1?'s':''}</strong><div class="small">One or more lines below look like they may already exist in another claim. This is only a warning — you can still submit and approve.</div></div>` : '';
 
-  c_html(`
+  c_html(`${returnForCorrection}
     <div style="margin-bottom:12px"><button class="btn btn-primary" onclick="navigate('${returnTo}')" style="padding:10px 18px">‹ Back to ${esc(returnLabel)}</button></div>
     ${r.status==='rejected' ? `<div class="card" style="border-left:5px solid var(--danger)"><strong style="color:var(--danger)">Returned for changes</strong><div class="small">${esc(r.rejection_note)||'No note provided.'} — please amend and resubmit.</div></div>`:''}
     ${isLocked ? `<div class="card" style="border-left:5px solid var(--success)"><strong style="color:var(--success)">🔒 Locked</strong><div class="small">This ${isCCt?'credit-card':'expense'} report has been ${isCCt?'fully approved':'reimbursed'} and is now locked from further amendment.</div></div>` : ''}
@@ -1148,6 +1185,7 @@ async function openReport(id){
       <div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Supplier / Journey</th><th>Category / Vehicle</th><th class="num">VAT</th><th class="num">Amount</th><th>Rcpt</th><th></th></tr></thead><tbody>${lineRows}</tbody></table></div>
     </div>
     ${approvalTrailHtml(r)}
+    ${messagesHtml(r, msgs)}
     <div class="card"><div style="display:flex;gap:10px;flex-wrap:wrap">
       ${ownerEditable ? `<button class="btn btn-success" onclick="submitReport('${r.id}')" ${t.count?'':'disabled'}>Submit for approval</button>`:''}
       ${editable ? `<button class="btn btn-outline" onclick="renameReport('${r.id}')">Rename</button>
@@ -1161,7 +1199,7 @@ async function openReport(id){
 function c_html(html){ document.getElementById('content').innerHTML = html; }
 // One-line description of how a mileage line was rated
 function mileageRateDesc(l){
-  const mi = round2(l.distance_miles||0);
+  const mi = round2(safeNumber(l.distance_miles)||0);
   if (l.company_car) return `${mi} mi · advisory ${l.rate_adv??''}p`;
   if (Number(l.miles_over)>0 && Number(l.miles_under)>0) return `${round2(l.miles_under)} mi @ ${l.rate_up}p + ${round2(l.miles_over)} mi @ ${l.rate_over}p`;
   if (Number(l.miles_over)>0) return `${mi} mi @ ${l.rate_over}p (over 10k)`;
@@ -1171,8 +1209,8 @@ function receiptCountBadge(l){ const n=(l.receipts||[]).length; return n?`<span 
 async function showLineReceipts(lineId){
   const l = await idbGet('lines', lineId); const rs=l.receipts||[];
   const thumbs = rs.map((r,i)=>{
-    const inner = (r.mime||'').startsWith('image/') ? `<img src="${r.data}">` : `<span class="doc">📄</span>`;
-    return `<div class="receipt-thumb" data-preview-src="${esc(r.data)}" data-preview-mime="${esc(r.mime||'')}" onclick="viewReceiptData('${r.data}','${r.mime}')">${inner}</div>`;
+    const inner = (r.mime||'').startsWith('image/') ? `<img src="${esc(safeReceiptUrl(r.data,r.mime))}">` : `<span class="doc">📄</span>`;
+    return `<div class="receipt-thumb" data-preview-src="${esc(safeReceiptUrl(r.data,r.mime))}" data-preview-mime="${esc(r.mime||'')}" onclick="viewReceiptData(${esc(JSON.stringify(safeReceiptUrl(r.data,r.mime)))},${esc(JSON.stringify(r.mime||''))})">${inner}</div>`;
   }).join('') || '<span class="muted small">None.</span>';
   const html = `<h2>Receipts</h2><div class="modal-sub">Hover over an image for a larger preview, or click to open.</div><div class="receipts">${thumbs}</div><div class="modal-actions"><button class="btn btn-outline" onclick="popOrCloseModal()">Close</button></div>`;
   pushModal(html);
@@ -1182,12 +1220,73 @@ function approvalTrailHtml(r){
   const isCCt = r.type==='creditcard';
   const steps = [];
   steps.push({ label:'Created / submitted', done:!!r.submitted_at, info:r.submitted_at?fmtDate(r.submitted_at):'' });
-  steps.push({ label:'Manager approval', done:!!r.manager_approved_at, cur:r.status==='awaiting_manager', info:r.manager_approved_at?`${userName(r.manager_approved_by)} · ${fmtDate(r.manager_approved_at)}`:'' });
-  steps.push({ label:'Finance approval', done:!!r.finance_approved_at, cur:r.status==='awaiting_finance', info:r.finance_approved_at?`${userName(r.finance_approved_by)} · ${fmtDate(r.finance_approved_at)}`:'' });
+  steps.push({ label:'Manager approval', done:!!r.manager_approved_at, cur:r.status==='awaiting_manager', info:r.manager_approved_at?`${esc(userName(r.manager_approved_by))} · ${fmtDate(r.manager_approved_at)}`:'' });
+  steps.push({ label:'Finance approval', done:!!r.finance_approved_at, cur:r.status==='awaiting_finance', info:r.finance_approved_at?`${esc(userName(r.finance_approved_by))} · ${fmtDate(r.finance_approved_at)}`:'' });
   if (!isCCt) steps.push({ label:'Reimbursed', done:!!r.reimbursed_at, cur:r.status==='awaiting_reimbursement', info:r.reimbursed_at?fmtDate(r.reimbursed_at):'' });
   return `<div class="card"><h3 style="margin-bottom:10px">Approval progress</h3><div class="trail">
     ${steps.map(s=>`<div class="step ${s.done?'done':''} ${s.cur?'cur':''}"><strong>${s.label}</strong>${s.info?` <span class="muted">— ${esc(s.info)}</span>`:''}</div>`).join('')}
   </div></div>`;
+}
+
+// ── Claim / receipt messages ──
+const MSG_KIND_META = {
+  amendment:{label:'Amendment required',c:'b-amber'}, rejection:{label:'Receipt rejected',c:'b-red'},
+  question:{label:'Question',c:'b-blue'}, reply:{label:'Reply',c:'b-grey'},
+};
+function lineMsgSummary(l){
+  const what = l.line_type==='mileage' ? `Mileage ${l.postcode_from||''} → ${l.postcode_to||''}` : (l.description || 'Expense');
+  return `${fmtDate(l.line_date)} · ${what} · ${fmtMoney(l.amount)}`;
+}
+function lineMsgButton(r, l, count){
+  return `<button class="btn btn-sm btn-outline" title="Message about this line" onclick="openMessageModal(${esc(JSON.stringify(r.id))},${esc(JSON.stringify(l.id))},${esc(JSON.stringify(lineMsgSummary(l)))})">💬${count?' '+count:''}</button>`;
+}
+function messagesHtml(r, msgs){
+  const fmtWhen = d => { const dt=new Date(d); return isNaN(dt)?'—':dt.toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); };
+  const items = msgs.map(m=>{
+    const k = MSG_KIND_META[m.kind] || {label:m.kind,c:'b-grey'};
+    const fromEmployee = m.author_id === r.user_id;
+    const mail = m.notified?.length ? `📧 Emailed to ${esc(m.notified.join(', '))}` : (m.notify ? 'Email requested — no recipient with an email address' : 'Not emailed');
+    return `<div style="border-left:4px solid ${fromEmployee?'var(--info)':'var(--border)'};padding:8px 12px;margin-bottom:10px;background:var(--bg)">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span class="badge ${k.c}">${esc(k.label)}</span>
+        <strong>${esc(m.author_name||userName(m.author_id))}</strong><span class="small muted">${fromEmployee?'(employee)':'(reviewer)'} · ${fmtWhen(m.created_at)}</span></div>
+      ${m.line_summary?`<div class="small muted" style="margin-top:4px">Line: ${esc(m.line_summary)}</div>`:'<div class="small muted" style="margin-top:4px">Whole claim</div>'}
+      <div style="margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere">${esc(m.body)}</div>
+      <div class="small muted" style="margin-top:4px">${mail}</div></div>`;
+  }).join('');
+  return `<div class="card"><div class="card-head"><h3>Messages <span class="muted small">(${msgs.length})</span></h3>
+    <button class="btn btn-sm btn-outline" onclick="openMessageModal(${esc(JSON.stringify(r.id))},'','')">+ Message about whole claim</button></div>
+    ${items || '<div class="muted small">No messages yet. Use 💬 on a line to raise an amendment, rejection or question about a specific receipt.</div>'}</div>`;
+}
+async function openMessageModal(reportId, lineId, summary){
+  const r = await idbGet('reports', reportId);
+  const isOwner = r.user_id === state.user.id;
+  const ownerName = state.usersById[r.user_id]?.full_name || 'the employee';
+  const kindField = isOwner
+    ? `<input type="hidden" id="msg-kind" value="reply">`
+    : `<div class="form-group"><label class="req">Type</label><select id="msg-kind">
+        <option value="amendment">Amendment required</option><option value="rejection">Receipt rejected</option>
+        <option value="question">Question</option><option value="reply">Reply / comment</option></select></div>`;
+  openModal(`<h2>${isOwner?'Reply':'Message'}${lineId?' about a line':' about this claim'}</h2>
+    <div class="modal-sub">${lineId?esc(summary):'Applies to the whole claim.'} Messages are kept on the claim and cannot be edited.</div>
+    ${kindField}
+    <div class="form-group"><label class="req">Message</label><textarea id="msg-body" rows="4" maxlength="4000"></textarea></div>
+    <label style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input type="checkbox" id="msg-notify" checked>
+      ${isOwner?'Email the reviewer(s) about this reply':'Inform '+esc(ownerName)+' by email'}</label>
+    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="msg-send" onclick="sendMessage(${esc(JSON.stringify(reportId))},${esc(JSON.stringify(lineId||''))})">Send</button></div>`);
+  setTimeout(()=>document.getElementById('msg-body')?.focus(), 50);
+}
+async function sendMessage(reportId, lineId){
+  const body = val('msg-body');
+  if (!body){ toast('Enter a message','error'); return; }
+  const btn = document.getElementById('msg-send'); if (btn) btn.disabled = true;
+  try {
+    const m = await apiFetch('POST', '/api/reports/'+_enc(reportId)+'/messages',
+      { line_id: lineId || null, kind: val('msg-kind'), body, notify: document.getElementById('msg-notify').checked });
+    closeModal();
+    toast(m.notified?.length ? 'Message sent and emailed to '+m.notified.join(', ') : 'Message saved on the claim');
+    openReport(reportId);
+  } catch(err){ toast(err.message || 'Could not send message','error'); if (btn) btn.disabled = false; }
 }
 
 async function renameReport(id){
@@ -1259,7 +1358,8 @@ async function openExpenseLineModal(line){
   const editMode = !!line;
   // Read-only only applies when a Detailed Review was started by a non-finance user.
   // Add mode and regular Edit (via the line's Edit button) always remain editable.
-  const canEdit = !editMode || !window._lineNav?.readOnly;
+  const editReport=state.currentReportId?await idbGet('reports',state.currentReportId):null;
+  const canEdit = (!editMode || !window._lineNav?.readOnly) && ['unsubmitted','rejected'].includes(editReport?.status);
   // Approve report button: shown when stepping through Detailed Review and you've reached the last line
   // AND you're entitled to approve at the report's current stage.
   const nav = window._lineNav;
@@ -1268,18 +1368,18 @@ async function openExpenseLineModal(line){
   const approveBtn = approveStageHere ? `<button class="btn btn-success" onclick="approveFromDetailedReview('${state.currentReportId}','${approveStageHere}')">✓ Approve report</button>` : '';
   const rejectBtn  = approveStageHere ? `<button class="btn btn-danger" onclick="rejectFromDetailedReview('${state.currentReportId}')">↺ Return to employee</button>` : '';
   const formFields = `
-    <div class="form-row"><div class="form-group"><label class="req">Date</label><input type="date" id="el-date" value="${line?.line_date||today()}"></div>
+    <div class="form-row"><div class="form-group"><label class="req">Date</label><input type="date" id="el-date" value="${esc(line?.line_date||today())}"></div>
       <div class="form-group"><label>Supplier</label>
         <input id="el-supplier" list="el-supplier-list" autocomplete="off" placeholder="Start typing to search…" value="${esc(curSupName)}"${canEdit?'':' disabled'}>
         <datalist id="el-supplier-list">${supDatalist}</datalist>
         ${canEdit?`<div class="small muted">Start typing to find a supplier. Type a new name to add it for everyone (duplicates are matched automatically).</div>`:''}</div></div>
     <div class="form-row-3">
       <div class="form-group"><label class="req">Category</label><select id="el-category">${catOpts}</select></div>
-      <div class="form-group"><label class="req">Amount (gross £)</label><input type="number" step="0.01" id="el-amount" value="${line?.amount||''}" oninput="recalcExpenseVat()"></div>
+      <div class="form-group"><label class="req">Amount (gross £)</label><input type="number" step="0.01" id="el-amount" value="${esc(line?.amount||'')}" oninput="recalcExpenseVat()"></div>
       <div class="form-group"><label>VAT rate</label><select id="el-vat-rate" onchange="recalcExpenseVat()">${vatOpts}</select></div>
     </div>
     <div class="form-row"><div class="form-group"><label>VAT (£)</label>
-        <div style="display:flex;gap:6px"><input type="number" step="0.01" id="el-vat" value="${line?.vat_amount??''}" oninput="_vatManual=true" style="flex:1">
+        <div style="display:flex;gap:6px"><input type="number" step="0.01" id="el-vat" value="${esc(line?.vat_amount??'')}" oninput="_vatManual=true" style="flex:1">
         ${canEdit?`<button type="button" class="btn btn-sm btn-outline" title="Recalculate from rate" onclick="_vatManual=false;recalcExpenseVat()">↻ Auto</button>`:''}</div>
         <div class="small muted">Auto-calculated, but you can type any VAT amount — it won't be overwritten.</div></div>
       <div class="form-group"><label>Description</label><input id="el-desc" value="${esc(line?.description||'')}"></div></div>
@@ -1376,19 +1476,20 @@ async function openMileageLineModal(line){
   const catOpts = optionList(cats.map(v=>({value:v.name,label:v.name})), line?.vehicle_type, true);
   const companyChecked = line ? !!line.company_car : true;
   const editMode = !!line;
-  const canEdit = !editMode || !window._lineNav?.readOnly;
+  const editReport=state.currentReportId?await idbGet('reports',state.currentReportId):null;
+  const canEdit = (!editMode || !window._lineNav?.readOnly) && ['unsubmitted','rejected'].includes(editReport?.status);
   const nav = window._lineNav;
   const onLastLine = editMode && nav && nav.idx === nav.ids.length - 1;
   const approveStageHere = onLastLine && state.currentReportId ? await approveStageFor(state.currentReportId) : null;
   const approveBtn = approveStageHere ? `<button class="btn btn-success" onclick="approveFromDetailedReview('${state.currentReportId}','${approveStageHere}')">✓ Approve report</button>` : '';
   const rejectBtn  = approveStageHere ? `<button class="btn btn-danger" onclick="rejectFromDetailedReview('${state.currentReportId}')">↺ Return to employee</button>` : '';
   const formFields = `
-    <div class="form-row"><div class="form-group"><label class="req">Date</label><input type="date" id="ml-date" value="${line?.line_date||today()}" onchange="recalcMileage()"></div>
+    <div class="form-row"><div class="form-group"><label class="req">Date</label><input type="date" id="ml-date" value="${esc(line?.line_date||today())}" onchange="recalcMileage()"></div>
       <div class="form-group"><label class="req">Vehicle reg</label><input id="ml-reg" value="${esc(line?.vehicle_reg||'')}" placeholder="e.g. YK19 ABC"></div></div>
     <div class="form-row-3">
       <div class="form-group"><label class="req">Postcode from</label><input id="ml-from" value="${esc(line?.postcode_from||'')}" placeholder="LS10 1AB"></div>
       <div class="form-group"><label class="req">Postcode to</label><input id="ml-to" value="${esc(line?.postcode_to||'')}" placeholder="RH10 8GH"></div>
-      <div class="form-group"><label class="req">Distance (miles)</label><input type="number" step="0.1" id="ml-dist" value="${line?.distance_miles||''}" oninput="recalcMileage()">
+      <div class="form-group"><label class="req">Distance (miles)</label><input type="number" step="0.1" id="ml-dist" value="${esc(line?.distance_miles||'')}" oninput="recalcMileage()">
         <button type="button" class="btn btn-sm btn-outline" style="margin-top:6px" onclick="estimateDistance()">↻ Estimate from postcodes</button></div>
     </div>
     <label class="chk" style="margin-bottom:12px"><input type="checkbox" id="ml-return" ${line?.return_journey?'checked':''}> Return journey
@@ -1406,7 +1507,7 @@ async function openMileageLineModal(line){
     <div class="totbar" style="margin-top:8px;align-items:center">
       <div class="t"><div class="v" id="ml-amount-d">£0.00</div><div class="l" id="ml-amount-l">Amount payable</div></div>
       <div class="t"><label class="small" style="color:rgba(255,255,255,.7);display:block;margin-bottom:2px">VAT (£) — editable</label>
-        <div style="display:flex;gap:6px"><input type="number" step="0.01" id="ml-vat" value="${line?.vat_amount??''}" oninput="_mvatManual=true" style="width:120px">
+        <div style="display:flex;gap:6px"><input type="number" step="0.01" id="ml-vat" value="${esc(line?.vat_amount??'')}" oninput="_mvatManual=true" style="width:120px">
         <button type="button" class="btn btn-sm btn-outline" style="border-color:rgba(255,255,255,.5);color:#fff" onclick="_mvatManual=false;recalcMileage()">↻ Auto</button></div></div>
     </div>`;
   const actions = canEdit ? `<div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Cancel</button>
@@ -1525,22 +1626,20 @@ async function saveMileageLine(id){
 let _tesseract = null;
 function loadTesseract(){
   if (window.Tesseract) return Promise.resolve(window.Tesseract);
-  return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'; s.onload=()=>res(window.Tesseract); s.onerror=()=>rej(new Error('load failed')); document.head.appendChild(s); });
+  return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='/vendor/tesseract/tesseract.min.js'; s.onload=()=>res(window.Tesseract); s.onerror=()=>rej(new Error('load failed')); document.head.appendChild(s); });
 }
 // CMap + standard-font tables pdf.js needs to decode subsetted/embedded fonts (e.g. TfL ticket receipts).
 // Without these, glyphs draw but characters can render as mojibake on machines without the font/cache.
-const PDFJS_CMAP  = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/';
-const PDFJS_FONTS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/';
-function pdfDocOpts(data){ return { data, cMapUrl: PDFJS_CMAP, cMapPacked: true, standardFontDataUrl: PDFJS_FONTS }; }
+const PDFJS_CMAP  = '/vendor/pdfjs-cmaps/';
+const PDFJS_FONTS = '/vendor/pdfjs-fonts/';
+function pdfDocOpts(data){ return { data, isEvalSupported: false, wasmUrl:'/vendor/pdfjs-wasm/', cMapUrl: PDFJS_CMAP, cMapPacked: true, standardFontDataUrl: PDFJS_FONTS }; }
+let pdfLoadPromise;
 function loadPdfJs(){
-  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
-  return new Promise((res,rej)=>{
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
-    s.onload = () => { try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'; } catch(e){} res(window.pdfjsLib); };
-    s.onerror = () => rej(new Error('load failed'));
-    document.head.appendChild(s);
-  });
+ if(window.pdfjsLib)return Promise.resolve(window.pdfjsLib);
+ if(!pdfLoadPromise)pdfLoadPromise=import('/vendor/pdfjs/pdf.mjs').then(lib=>{
+   lib.GlobalWorkerOptions.workerSrc='/vendor/pdfjs/pdf.worker.mjs';window.pdfjsLib=lib;return lib;
+ }).catch(error=>{pdfLoadPromise=null;throw error;});
+ return pdfLoadPromise;
 }
 function dataURLtoUint8Array(dataUrl){
   const b64 = (dataUrl||'').split(',')[1] || '';
@@ -1591,8 +1690,9 @@ async function preprocessForOcr(dataUrl, scale=2){
   return new Promise(resolve => {
     const img = new Image();
     img.onload = () => {
+      if(img.naturalWidth*img.naturalHeight>20000000){resolve(dataUrl);return;}
       const c = document.createElement('canvas');
-      c.width = Math.max(800, img.naturalWidth*scale);
+      c.width = Math.min(4000, Math.max(800, img.naturalWidth*scale));
       c.height = Math.round(img.naturalHeight * (c.width / img.naturalWidth));
       const ctx = c.getContext('2d');
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
@@ -1617,8 +1717,8 @@ async function ocrImage(dataUrl){
   catch(e){ toast('Auto-scan needs an internet connection — enter details manually','error'); throw e; }
   let prepped = dataUrl;
   try { prepped = await preprocessForOcr(dataUrl, 2); } catch(e){}
-  const { data } = await T.recognize(prepped, 'eng');
-  return data.text || '';
+  const worker=await T.createWorker('eng',1,{workerPath:'/vendor/tesseract/worker.min.js',corePath:'/vendor/tesseract-core',langPath:'/vendor/ocr-eng',workerBlobURL:false});
+  try{ const {data}=await worker.recognize(prepped);return data.text||''; }finally{await worker.terminate();}
 }
 async function runReceiptScan(){
   const r = _lineReceipts.find(x=>(x.mime||'').startsWith('image/')) || _lineReceipts.find(x=>(x.mime||'').toLowerCase().includes('pdf'));
@@ -1738,7 +1838,7 @@ async function exportReport(id){
       l.line_type==='mileage'?`${l.postcode_from} > ${l.postcode_to}`:nameById(sups,l.supplier_id),
       l.line_type==='mileage'?'Mileage':(cat?.name||''), l.line_type==='mileage'?'':(cat?.nominal_code||''),
       nameById(vats,l.vat_rate_id), round2((l.amount||0)-(l.vat_amount||0)).toFixed(2), (l.vat_amount||0).toFixed(2), (l.amount||0).toFixed(2),
-      l.description, (l.vehicle_type||'')+(l.company_car?' (Company car)':''), l.vehicle_reg||'', l.distance_miles||'', (l.receipts||[]).length ];
+      l.description, (l.vehicle_type||'')+(l.company_car?' (Company car)':''), l.vehicle_reg||'', safeNumber(l.distance_miles)||'', (l.receipts||[]).length ];
   });
   const t = lineTotals(lines);
   rows.push(['','','','','','TOTAL', t.net.toFixed(2), t.vat.toFixed(2), t.gross.toFixed(2),'','','','','']);
@@ -1762,6 +1862,13 @@ async function printableReport(reportId){
 
   const companyName = await getSetting('company_name', COMPANY);
   const companyAddress = await getSetting('company_address', '');
+  let msgs = [];
+  try { msgs = await apiFetch('GET', '/api/reports/'+_enc(reportId)+'/messages') || []; } catch(e){}
+  const msgRows = msgs.map(m=>`<tr><td>${esc(new Date(m.created_at).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}))}</td>
+    <td>${esc(m.author_name||userName(m.author_id))}${m.author_id===r.user_id?' (employee)':''}</td>
+    <td>${esc(MSG_KIND_META[m.kind]?.label||m.kind)}</td>
+    <td>${m.line_summary?'<em>'+esc(m.line_summary)+'</em><br>':''}<span style="white-space:pre-wrap">${esc(m.body)}</span></td>
+    <td>${m.notified?.length?'Emailed: '+esc(m.notified.join(', ')):'Not emailed'}</td></tr>`).join('');
 
   // Inline the logo SVG so the print window doesn't need a network fetch from inside about:blank
   let logoSvg = '';
@@ -1807,7 +1914,7 @@ async function printableReport(reportId){
     const isMile = l.line_type==='mileage';
     const supplier = isMile ? '—' : nameById(sups, l.supplier_id);
     const details = isMile
-      ? `Mileage · ${esc(l.postcode_from||'')} → ${esc(l.postcode_to||'')}${l.return_journey?' (return)':''} · ${l.distance_miles||0}mi${l.company_car?' · Company car':''}${l.description?'<br><span class="muted">'+esc(l.description)+'</span>':''}`
+      ? `Mileage · ${esc(l.postcode_from||'')} → ${esc(l.postcode_to||'')}${l.return_journey?' (return)':''} · ${safeNumber(l.distance_miles)||0}mi${l.company_car?' · Company car':''}${l.description?'<br><span class="muted">'+esc(l.description)+'</span>':''}`
       : `${esc(nameById(cats, l.category_id)||'')}${l.description?'<br><span class="muted">'+esc(l.description)+'</span>':''}`;
     const gross = Number(l.amount)||0;
     const vat = Number(l.vat_amount)||0;
@@ -1901,6 +2008,12 @@ async function printableReport(reportId){
     </tbody>
   </table>
 
+  ${msgRows ? `<h3 class="section">Messages</h3>
+  <table>
+    <thead><tr><th>When</th><th>From</th><th>Type</th><th>Message</th><th>Email</th></tr></thead>
+    <tbody>${msgRows}</tbody>
+  </table>` : ''}
+
   ${receiptSections.length ? `
     <div class="receipts">
       <h3>Receipts</h3>
@@ -1908,7 +2021,7 @@ async function printableReport(reportId){
         <div class="receipt-block">
           <h4>${esc(s.label)}</h4>
           ${s.images.map(img => typeof img === 'string'
-            ? `<img src="${img}">`
+            ? `<img src="${esc(safeReceiptUrl(img,''))}">`
             : `<div class="placeholder">${esc(img.placeholder)}</div>`).join('')}
         </div>`).join('')}
     </div>` : '<p class="muted" style="margin-top:16px">No receipts attached to this report.</p>'}
@@ -1926,7 +2039,7 @@ async function mileageSummary(userId, ty){
   const b = taxYearBounds(ty);
   const lines = (await allMileageLinesFor(userId)).filter(l=>l.line_date>=b.start && l.line_date<=b.end);
   let own=0, company=0, amount=0, vat=0;
-  lines.forEach(l=>{ const mi=Number(l.distance_miles)||0; if(l.company_car) company+=mi; else own+=mi; amount+=Number(l.amount)||0; vat+=Number(l.vat_amount)||0; });
+  lines.forEach(l=>{ const mi=Number(safeNumber(l.distance_miles))||0; if(l.company_car) company+=mi; else own+=mi; amount+=Number(l.amount)||0; vat+=Number(l.vat_amount)||0; });
   const adj = (await idbGetAll('mileage_adjustments')).filter(a=>a.user_id===userId && a.tax_year===ty);
   const adjMiles = adj.reduce((s,a)=>s+(Number(a.miles)||0),0);
   const approvedTotal = own + adjMiles;
@@ -1977,7 +2090,7 @@ async function renderMileageTracker(c){
         ${linesSorted.map(l=>`<tr class="clickable" onclick="openReport('${l.report_id}')"><td>${fmtDate(l.line_date)}</td>
           <td>${esc(l.postcode_from)} → ${esc(l.postcode_to)}<div class="small muted">${esc(l._report?.title||'')}</div></td>
           <td>${esc(l.vehicle_type)}${l.company_car?' <span class="badge b-grey">Company car</span>':''}</td>
-          <td class="num">${round2(l.distance_miles)}</td><td class="small">${esc(mileageRateDesc(l))}</td>
+          <td class="num">${round2(safeNumber(l.distance_miles))}</td><td class="small">${esc(mileageRateDesc(l))}</td>
           <td class="num">${fmtMoney(l.amount)}</td><td>›</td></tr>`).join('')
         || '<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">No mileage claims this tax year.</td></tr>'}
       </tbody></table></div></div>`;
@@ -2055,7 +2168,7 @@ async function renderFinanceApprovals(c){
     <div class="table-wrap"><table><thead><tr><th>Report</th><th>Owner</th><th>Type</th><th>1st approved</th><th class="num">Total</th><th></th></tr></thead><tbody>
       ${queue.map(r=>`<tr><td class="clickable" onclick="openApproval('${r.id}','finance')"><strong>${esc(r.title)}</strong>${r.reference?`<div class="small muted">${esc(r.reference)}</div>`:''}</td>
         <td>${esc(userName(r.user_id))}</td><td>${r.type==='creditcard'?'Credit card':'Expense'}</td>
-        <td>${r.manager_approved_at?userName(r.manager_approved_by):'<span class="muted">direct</span>'}</td>
+        <td>${r.manager_approved_at?esc(userName(r.manager_approved_by)):'<span class="muted">direct</span>'}</td>
         <td class="num">${fmtMoney(r._t.gross)}</td>
         <td><button class="btn btn-sm btn-success" onclick="openApproval('${r.id}','finance')">Review</button>
         <button class="btn btn-sm btn-info" onclick="openDetailedReview('${r.id}','finance')">Detailed Review</button>
@@ -2076,7 +2189,7 @@ async function openApproval(id, stage){
   const rowsHtml = lines.map(l=>{ const dup = dupBadge(dups.get(l.id));
     return `<tr><td>${fmtDate(l.line_date)}</td><td>${l.line_type==='mileage'?'<span class="badge b-blue">Mileage</span>':'<span class="badge b-yellow">Expense</span>'}${dup}</td>
     <td>${l.line_type==='mileage'?esc(l.postcode_from)+' → '+esc(l.postcode_to):esc(nameById(sups,l.supplier_id))}<div class="small muted">${esc(l.description)||''}</div></td>
-    <td>${l.line_type==='mileage'?esc(l.vehicle_type)+' · '+l.distance_miles+'mi':esc(nameById(cats,l.category_id))}</td>
+    <td>${l.line_type==='mileage'?esc(l.vehicle_type)+' · '+safeNumber(l.distance_miles)+'mi':esc(nameById(cats,l.category_id))}</td>
     <td class="num">${fmtMoney(l.vat_amount)}</td><td class="num">${fmtMoney(l.amount)}</td><td>${receiptCountBadge(l)}</td></tr>`; }).join('');
   const dupNotice = dups.size ? `<div class="scan-box" style="background:#fff3e0;border-color:var(--warning)"><strong>⚠ ${dups.size} possible duplicate${dups.size>1?'s':''}</strong> — review the flagged line${dups.size>1?'s':''} before approving. This is a warning only; you can still approve.</div>` : '';
   openModal(`<h2>${r.reference?esc(r.reference)+' · ':''}${esc(r.title)}</h2><div class="modal-sub">${esc(userName(r.user_id))} · ${r.type==='creditcard'?'Credit card':'Expense'} · Total <strong>${fmtMoney(t.gross)}</strong> (VAT ${fmtMoney(t.vat)})</div>
@@ -2145,10 +2258,17 @@ async function openDetailedReview(reportId, stage){
   state.currentReportId = reportId;
   if (stage) window._reviewStage = stage;
   const ids = lines.map(l=>l.id);
-  window._lineNav = { ids, idx:0, readOnly: !isFinance() };
+  const reviewReport=await idbGet('reports',reportId);
+  window._lineNav = { ids, idx:0, readOnly: !isFinance() || !['unsubmitted','rejected'].includes(reviewReport.status) };
   const first = lines[0];
   if (first.line_type === 'mileage') openMileageLineModal(first);
   else openExpenseLineModal(first);
+}
+async function returnForCorrection(id){
+  const note=prompt('Explain what needs correcting:');if(!note?.trim())return;
+  const report=await idbGet('reports',id);
+  await idbPut('reports',{...report,status:'rejected',rejection_note:note.trim()});
+  await openReport(id);toast('Returned for correction; approvals will be required again.');
 }
 async function rejectReport(id){
   const note = val('ap-note'); if(!note){ toast('Please add a note explaining what to change','error'); return; }
@@ -2374,7 +2494,7 @@ async function exportAllLines(){
       l.line_type==='mileage'?`${l.postcode_from} > ${l.postcode_to}`:nameById(sups,l.supplier_id),
       l.line_type==='mileage'?'Mileage':(cat?.name||''), l.line_type==='mileage'?'':(cat?.nominal_code||''),
       '', nameById(vats,l.vat_rate_id), round2((l.amount||0)-(l.vat_amount||0)).toFixed(2),(l.vat_amount||0).toFixed(2),(l.amount||0).toFixed(2),
-      l.description, (l.vehicle_type||'')+(l.company_car?' (Company car)':''), l.vehicle_reg||'', l.distance_miles||'' ]; });
+      l.description, (l.vehicle_type||'')+(l.company_car?' (Company car)':''), l.vehicle_reg||'', safeNumber(l.distance_miles)||'' ]; });
   downloadExcel('all_expenses.xls','AllExpenses',headers,rows,'All expense lines');
 }
 
@@ -2427,7 +2547,7 @@ async function renderGlReport(c){
         description: l.description || '',
         vehicle: isMile ? (l.vehicle_type||'')+(l.company_car?' (Company car)':'') : '',
         reg: isMile ? (l.vehicle_reg || '') : '',
-        miles: isMile ? (l.distance_miles || '') : '',
+        miles: isMile ? (safeNumber(l.distance_miles) || '') : '',
         status: STATUS_META[r.status]?.label || r.status,
         report_id: r.id
       });
@@ -2645,7 +2765,7 @@ async function renderReconcileModal(){
           const isCredit = t.amount < 0;
           const rowStyle = t.ticked ? 'background:#e3f3e4' : (isCredit ? 'background:#e8f4f8' : '');
           return `<tr style="${rowStyle}">
-            <td><input type="checkbox" ${t.ticked?'checked':''} onchange="toggleReconTx('${t.id}')"></td>
+            <td><input type="checkbox" ${t.ticked?'checked':''} onchange="toggleReconTx(${esc(JSON.stringify(String(t.id)))})"></td>
             <td class="small">${fmtDate(t.date)}</td>
             <td class="small">${esc(t.description.slice(0,55))}${t.description.length>55?'…':''}${isCredit?' <span class="badge b-blue" style="font-size:.65rem">CR</span>':''}</td>
             <td class="num"${isCredit?' style="color:var(--info);font-weight:600"':''}>${fmtMoney(t.amount)}</td>
@@ -3021,9 +3141,34 @@ async function renderUsers(c){
       <td><div class="chips">${ROLES.map(r=>`<span class="chip ${u.roles.includes(r.key)?'on':''}">${r.label}</span>`).join('')}</div></td>
       <td>${esc(nameById(depts,u.department_id))}</td><td>${esc(nameById(locs,u.location_id))}</td><td>${esc(userName(u.approver1_id))}</td><td>${esc(userName(u.approver2_id))}</td>
       <td>${u.active?'<span class="badge b-green">Active</span>':'<span class="badge b-grey">Disabled</span>'}</td>
-      <td><button class="btn btn-sm btn-outline" onclick="editUser('${u.id}')">Edit</button>
-      <button class="btn btn-sm btn-outline" onclick="resetPwd('${u.id}')">Reset PW</button></td></tr>`).join('')}
+      <td><div class="user-actions"><button class="btn btn-sm btn-outline" onclick="editUser('${u.id}')">Edit</button>
+      <button class="btn btn-sm btn-danger" onclick="confirmDeleteUser('${u.id}')" ${u.id===state.user.id?'disabled title="You cannot delete your own account"':''}>Delete</button></div></td></tr>`).join('')}
   </tbody></table></div></div>`;
+}
+async function confirmDeleteUser(id){
+  if (!isFinance() || id === state.user.id) return;
+  const user = await idbGet('users', id);
+  if (!user) { toast('User no longer exists', 'error'); return; }
+  openModal(`<h2>Delete user?</h2>
+    <p class="modal-sub">Delete <strong>${esc(user.full_name || user.username)}</strong>? This cannot be undone.</p>
+    <p>Accounts with expense reports or approval assignments must be disabled instead. A deleted user can sign in with Microsoft again to create a new account with no permissions.</p>
+    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+    <button id="confirm-delete-user" class="btn btn-danger" onclick="deleteUser('${id}')">Delete user</button></div>`);
+}
+async function deleteUser(id){
+  if (!isFinance() || id === state.user.id) return;
+  const button = document.getElementById('confirm-delete-user');
+  if (button) button.disabled = true;
+  try {
+    await idbDelete('users', id);
+    await refreshCaches();
+    closeModal();
+    await navigate('adm-users');
+    toast('User deleted');
+  } catch (error) {
+    if (button) button.disabled = false;
+    toast(error.message || 'Could not delete user', 'error');
+  }
 }
 async function editUser(id){
   const users = await idbGetAll('users');
@@ -3035,8 +3180,8 @@ async function editUser(id){
   openModal(`<h2>${id?'Edit':'Add'} user</h2>
     <div class="form-row"><div class="form-group"><label class="req">Full name</label><input id="u-name" value="${esc(rec.full_name||'')}"></div>
       <div class="form-group"><label class="req">Username</label><input id="u-username" value="${esc(rec.username||'')}" ${id?'readonly':''}></div></div>
-    <div class="form-row"><div class="form-group"><label>Email</label><input id="u-email" value="${esc(rec.email||'')}"></div>
-      <div class="form-group"><label>${id?'New password (leave blank to keep)':'Password'}</label><input id="u-pwd" type="text" placeholder="${id?'unchanged':'set a password'}"></div></div>
+    <div class="form-group"><label>Email</label><input id="u-email" value="${esc(rec.email||'')}"></div>
+    <div class="form-group"><label>Microsoft user object ID</label><input id="u-microsoft-oid" value="${esc(rec.microsoft_oid||'')}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"><div class="small muted">Required for sign-in: the user’s Object ID from your company’s Microsoft Entra directory. This enables Microsoft sign-in for this Expenses account.</div></div>
     <div class="form-group"><label>Account number (E8)</label><input id="u-account" value="${esc(rec.account_number||'')}"><div class="small muted">Supplier account number in E8 &mdash; shown near the top of this person&#39;s printed expense reports.</div></div>
     <div class="form-group"><label>Roles</label><div class="form-row" style="grid-template-columns:1fr 1fr">
       ${ROLES.map(r=>`<label class="chk"><input type="checkbox" class="u-role" value="${r.key}" ${rec.roles?.includes(r.key)?'checked':''}> ${r.label}</label>`).join('')}
@@ -3051,7 +3196,7 @@ async function editUser(id){
         <div class="form-group"><label>2nd approver (finance)</label><select id="u-app2">${optionList(finance.map(m=>({value:m.id,label:m.full_name})), rec.approver2_id, true)}</select><div class="small muted">Final sign-off.</div></div>
       </div></fieldset>
     ${id?`<label class="chk"><input type="checkbox" id="u-active" ${rec.active?'checked':''}> Account active</label>`:''}
-    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveUser('${id}')">Save</button></div>`, true);
+    <div class="modal-actions">${id && id!==state.user.id ? `<button class="btn btn-danger" style="margin-right:auto" onclick="confirmDeleteUser('${id}')">Delete user</button>` : ''}<button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveUser('${id}')">Save</button></div>`, true);
 }
 async function saveUser(id){
   const name=val('u-name'), username=val('u-username').toLowerCase();
@@ -3064,26 +3209,17 @@ async function saveUser(id){
   if(!location_id){ toast('Location is required','error'); return; }
   const users = await idbGetAll('users');
   if(!id && users.some(u=>u.username===username)){ toast('Username already exists','error'); return; }
-  const rec = id ? users.find(u=>u.id===id) : { id:uuid(), created_at:nowISO(), must_change_password:true };
+  const rec = id ? users.find(u=>u.id===id) : { id:uuid(), created_at:nowISO(), must_change_password:false };
   rec.full_name=name; rec.username=username; rec.email=val('u-email'); rec.roles=roles;
   rec.department_id=department_id; rec.location_id=location_id;
   rec.approver1_id=val('u-app1')||null; rec.approver2_id=val('u-app2')||null;
   rec.account_number = val('u-account');
+  rec.microsoft_oid = val('u-microsoft-oid').toLowerCase() || null;
   rec.active = id ? (document.getElementById('u-active')?.checked?1:0) : 1;
-  const pwd = val('u-pwd');
-  if (pwd) rec.password = pwd;                 // server hashes it (bcrypt)
-  else if (!id) rec.password = 'changeme';     // default for a brand-new user
-  if (!id) rec.must_change_password = true;    // force new users to set their own password
   delete rec.password_hash;                    // never send a client-side hash
   await idbPut('users', rec); await refreshCaches(); closeModal(); navigate('adm-users');
   toast(id?'User updated':'User created');
 }
-async function resetPwd(id){
-  const np = prompt('Enter a new password for this user:'); if(!np) return;
-  const u = await idbGet('users', id); u.password = np; u.must_change_password=true; delete u.password_hash; await idbPut('users', u);
-  toast('Password reset');
-}
-
 // ═══════════════════════════════════════════════
 // HOVER PREVIEW for receipt thumbnails
 // ═══════════════════════════════════════════════
@@ -3103,7 +3239,7 @@ function setupReceiptHoverPreview(){
     const t = e.target.closest && e.target.closest('.receipt-thumb'); if(!t) return;
     const src = t.dataset.previewSrc, mime = t.dataset.previewMime||'';
     if (!src || !mime.startsWith('image/')) return;   // PDFs don't get a hover preview
-    el.innerHTML = `<img src="${src}" style="max-width:500px;max-height:500px;display:block;border-radius:6px">`;
+    el.innerHTML = `<img src="${esc(safeReceiptUrl(src,mime))}" style="max-width:500px;max-height:500px;display:block;border-radius:6px">`;
     el.style.display = 'block'; place(e);
   });
   document.addEventListener('mousemove', e => { if (el.style.display==='block') place(e); });
@@ -3135,8 +3271,14 @@ async function runAdminSetup(){
 (async function init(){
   try {
     setupReceiptHoverPreview();
-    const _resetToken = new URLSearchParams(location.search).get('reset');
-    if (_resetToken){ showResetForm(_resetToken); return; }
+    const microsoftSignedIn = await KomfortMicrosoft.init(async session => {
+      AUTH_TOKEN = session.token; localStorage.setItem('exp_token', session.token);
+      state.user = session.user;
+      if (hasPermissions()) await logAction('login', { method: 'microsoft' });
+      await runAdminSetup();
+      await enterApp();
+    });
+    if (microsoftSignedIn) return;
     if (AUTH_TOKEN){
       let me = null;
       try { me = await apiFetch('GET', '/api/me'); } catch(e){ me = null; }

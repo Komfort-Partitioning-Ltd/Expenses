@@ -6,7 +6,7 @@ const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('crypto');
 
 // DATA_DIR points at the persistent disk in production (e.g. /var/data on Render),
 // falling back to a local ./data folder for development.

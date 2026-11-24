@@ -4,19 +4,24 @@
   "description": "Expenses Management System for Komfort Partitioning",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "node --env-file-if-exists=.env server.js",
+    "test": "node --test test/*.test.js",
+    "link-user": "node --env-file-if-exists=.env link-microsoft-user.js",
+    "set-admin-password": "node --env-file-if-exists=.env set-admin-password.js"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.13.0"
   },
   "dependencies": {
+    "@tesseract.js-data/eng": "1.0.0",
     "bcryptjs": "^2.4.3",
-    "cors": "^2.8.5",
     "express": "^4.21.0",
+    "jose": "^5.10.0",
     "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^6.9.14",
+    "nodemailer": "10.6.0",
+    "pdfjs-dist": "6.5.438",
     "sql.js": "^1.11.0",
-    "uuid": "^10.0.0"
+    "tesseract.js": "7.0.0"
   }
 }

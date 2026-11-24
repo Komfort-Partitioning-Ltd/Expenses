@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Komfort Expenses — Admin set-up sign-in</title>
+<style>
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         font-family:"Segoe UI",Arial,sans-serif; background:#f4f5f6; color:#222; padding:20px; box-sizing:border-box; }
+  .card { background:#fff; border-radius:10px; box-shadow:0 4px 20px rgba(0,0,0,.08); padding:32px; width:100%; max-width:380px; }
+  img { height:56px; display:block; margin:0 auto 20px; }
+  h1 { font-size:1.15rem; margin:0 0 6px; }
+  .warn { background:#fff4e5; border:1px solid #f5c26b; border-radius:6px; padding:8px 10px; font-size:.82rem; margin:12px 0 18px; }
+  label { display:block; font-size:.85rem; margin-bottom:4px; color:#555; }
+  input { width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #ccc; border-radius:6px; font-size:.95rem; margin-bottom:14px; }
+  button { width:100%; padding:10px; border:0; border-radius:6px; background:#565A5C; color:#fff; font-size:.95rem; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:default; }
+  #msg { color:#b3261e; font-size:.85rem; min-height:1.2em; margin-top:10px; }
+</style>
+</head>
+<body>
+<form class="card" id="f">
+  <img src="/logo.svg" alt="Komfort">
+  <h1>Admin set-up sign-in</h1>
+  <div class="warn">For initial set-up and recovery only. Staff sign in with Microsoft.
+    Turn this off (<code>ADMIN_LOGIN_ENABLED</code>) once Microsoft accounts are linked.</div>
+  <label for="u">Username</label>
+  <input id="u" autocomplete="username" required autofocus>
+  <label for="p">Password</label>
+  <input id="p" type="password" autocomplete="current-password" required>
+  <button id="b" type="submit">Sign in</button>
+  <div id="msg" role="alert"></div>
+</form>
+<script>
+document.getElementById('f').addEventListener('submit', async e => {
+  e.preventDefault();
+  const b = document.getElementById('b'), msg = document.getElementById('msg');
+  b.disabled = true; msg.textContent = '';
+  try {
+    const r = await fetch('/api/auth/admin-login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: document.getElementById('u').value.trim(), password: document.getElementById('p').value }) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || 'Sign-in failed');
+    localStorage.setItem('exp_token', data.token);
+    location.replace('/');
+  } catch (err) { msg.textContent = err.message; b.disabled = false; }
+});
+</script>
+</body>
+</html>
